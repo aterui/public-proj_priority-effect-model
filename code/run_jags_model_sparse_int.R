@@ -3,15 +3,12 @@
 
 rm(list = ls())
 source(here::here("code/library.R"))
-source(here::here("code/set_functions.R"))
-source(here::here("code/data_fmt_fishdata.R"))
-
 
 # common setup ------------------------------------------------------------
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 1.0E+4
+n_iter <- 2.0E+3
 n_thin <- max(3, ceiling(n_iter / 250))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
@@ -25,10 +22,11 @@ inits <- replicate(n_chain,
 for (j in 1:n_chain) inits[[j]]$.RNG.seed <- (j - 1) * 10 + 1
 
 ## model file ####
-m <- read.jagsfile("code/model_multi_ricker_sparse.R")
+m <- read.jagsfile("code/model_sparse_int.R")
 
 ## parameters ####
-para <- c("p0",
+para <- c("loglik",
+          "p0",
           "log_r",
           "sigma_time",
           "sigma_obs",
@@ -38,46 +36,51 @@ para <- c("p0",
 
 # jags --------------------------------------------------------------------
 
-## data screening
-unique_site <- df_complete %>% 
-  mutate(p = ifelse(abundance > 0, 1, 0)) %>% 
-  group_by(site_id, taxon) %>% 
-  summarize(freq = sum(p, na.rm = T),
-            site_id = unique(site_id)) %>% 
-  filter(freq > 4) %>% 
-  group_by(site_id) %>% 
-  summarize(n_taxa = n_distinct(taxon)) %>% 
-  filter(n_taxa > 1) %>% 
-  pull(site_id)
+## psi = 0: niche-structured
+## psi = 1: neutral
 
-df_est <- foreach(i = seq_len(length(unique_site)),
-                  .combine = bind_rows) %do% {
+psi <- c(0, 1)
+df_para <- expand.grid(n_species = 10,
+                       n_timestep = c(5, 10, 20),
+                       r = 1,
+                       alpha = c(1, 0.5),
+                       k = 100,
+                       sd_env = 0.1)
+
+df_p <- foreach(i = seq_len(nrow(df_para)),
+                .combine = bind_rows) %do% {
+                  
+                  x <- df_para[i,]
+                  
+                  list_re <- foreach(j = 1:2) %do% {
                     
-                    ## subset data ####
-                    df_subset <- df_complete %>% 
-                      dplyr::filter(site_id == unique_site[i]) %>% 
-                      mutate(p = ifelse(abundance > 0, 1, 0)) %>% 
-                      group_by(taxon) %>% 
-                      summarize(freq = sum(p, na.rm = T),
-                                site_id = unique(site_id)) %>% 
-                      filter(freq > 4) %>% 
-                      dplyr::select(taxon, site_id) %>% 
-                      left_join(df_complete,
-                                by = c("taxon", "site_id")) %>% 
-                      mutate(taxon_id = as.numeric(factor(.$taxon)))
+                    # data --------------------------------------------------------------------
+                    set.seed(1)
+                    list_dyn <- cdyns::cdynsim(n_species = x$n_species,
+                                               n_timestep = x$n_timestep,
+                                               r_type = "constant",
+                                               r = x$r,
+                                               int_type = "constant",
+                                               alpha = x$alpha,
+                                               k = x$k, 
+                                               sd_env = x$sd_env,
+                                               model = "ricker")
+                    
+                    df0 <- list_dyn$df_dyn %>% 
+                      mutate(count = rpois(nrow(.), lambda = density))
                     
                     ## data for jags ####
-                    d_jags <- list(N = df_subset$abundance,
-                                   Year = df_subset$year - min(df_subset$year) + 1,
-                                   Species = as.numeric(factor(df_subset$taxon)),
-                                   Area = df_subset$area,
-                                   Nsample = nrow(df_subset),
-                                   Nyr1 = min(df_subset$year, na.rm = T) - 1999 + 1,
-                                   Nyr = max(df_subset$year, na.rm = T) - min(df_subset$year, na.rm = T) + 1,
-                                   Nsp = n_distinct(df_subset$taxon),
+                    d_jags <- list(N = df0$count,
+                                   Year = df0$timestep,
+                                   Species = df0$species,
+                                   Nsample = nrow(df0),
+                                   Nyr1 = 1,
+                                   Nyr = max(df0$timestep),
+                                   Nsp = n_distinct(df0$species),
                                    Nf = 2,
-                                   W = diag(n_distinct(df_subset$taxon)),
-                                   Q = 1)
+                                   W = diag(n_distinct(df0$species)),
+                                   Q = 1,
+                                   Psi = psi[j])
                     
                     ## run jags ####
                     post <- run.jags(m$model,
@@ -95,61 +98,23 @@ df_est <- foreach(i = seq_len(length(unique_site)),
                     
                     mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
                     
-                    print(max(mcmc_summary$Rhat, na.rm = T))
                     
-                    while(max(mcmc_summary$Rhat, na.rm = T) >= 1.1) {
-                      post <- extend.jags(post,
-                                          burnin = 0,
-                                          sample = n_sample,
-                                          adapt = n_ad,
-                                          thin = n_thin,
-                                          n.sims = n_chain,
-                                          combine = TRUE)
-                      
-                      mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
-                      print(max(mcmc_summary$Rhat, na.rm = T))
-                    }
+                    # model evaluation --------------------------------------------------------
                     
-                    ## reformat mcmc_summary ####
-                    n_total_mcmc <- (post$sample / n_sample) * n_iter + n_burn
+                    waic_bar <- MCMCvis::MCMCchains(post$mcmc) %>% 
+                      as_tibble() %>% 
+                      dplyr::select(starts_with("loglik")) %>% 
+                      data.matrix() %>% 
+                      waic()
                     
-                    mcmc_summary <- mcmc_summary %>% 
-                      mutate(param = rownames(.),
-                             site = unique_site[i]) %>% 
-                      tibble() %>% 
-                      rename(median = `50%`,
-                             lower = `2.5%`,
-                             upper = `97.5%`) %>% 
-                      mutate(param_name = str_remove(param,
-                                                     pattern = "\\[.{1,}\\]"),
-                             x = fn_brrm(param),
-                             n_total_mcmc = n_total_mcmc,
-                             n_sample = post$sample,
-                             n_thin = n_thin,
-                             n_burn = n_burn,
-                             n_chain = n_chain) %>% 
-                      separate(col = x,
-                               into = c("x1", "x2"),
-                               sep = ",",
-                               fill = "right",
-                               convert = TRUE) %>% 
-                      filter(!str_detect(param, "loglik")) %>% 
-                      left_join(distinct(df_subset, taxon, taxon_id),
-                                by = c("x1" = "taxon_id")) %>% 
-                      left_join(distinct(df_subset, taxon, taxon_id),
-                                by = c("x2" = "taxon_id"))
-                    
-                    ## trace plot output ####
-                    MCMCvis::MCMCtrace(post$mcmc,
-                                       filename = paste0("output/mcmc_trace_multi_ricker_sparse_",
-                                                         unique_site[i]))
-                    
-                    print(paste(i, "/", length(unique_site)))
-                    return(mcmc_summary)
+                    return(waic_bar)
                   }
-
-
-# export ------------------------------------------------------------------
-
-saveRDS(df_est,
-        file = here::here("output/summary_multi_ricker_sparse.rds"))
+                  
+                  v_waic <- lapply(list_re, function(x) x$estimates[3,1]) %>%
+                    unlist()
+                  
+                  x %>%
+                    mutate(waic0 = v_waic[1],
+                           waic1 = v_waic[2],
+                           d_waic = waic1 - waic0)
+                }
