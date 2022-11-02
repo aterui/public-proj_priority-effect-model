@@ -10,9 +10,9 @@ model {
   
   for (t in Nyr1:Nyr) {
     for (i in 1:Nsp) {
-      lambda[t, i] <- d[t, i]
-      #log(d_obs[t, i]) <- log_d_obs[t, i]
-      #log_d_obs[t, i] ~ dnorm(log_d[t, i], tau_obs[i])
+      lambda[t, i] <- d_obs[t, i]
+      log(d_obs[t, i]) <- log_d_obs[t, i]
+      log_d_obs[t, i] ~ dnorm(log_d[t, i], tau_obs[i])
       log(d[t, i]) <- log_d[t, i]
     }
   }  
@@ -25,7 +25,7 @@ model {
       log_mu_d[t, i] <- 
         log_d[t - Q, i] + 
         log_r[i] - 
-        inprod(alpha[i, ], d[t - Q, ]) +
+        (1 + inprod(alpha[i, ], d[t - Q, ])) +
         inprod(xi[ , i], eta[t - Q, ])
     }
   }
@@ -51,7 +51,7 @@ model {
   }  
   
   ## sparse prior for alpha[i, j] for i != j ####
-  alpha0 ~ dnorm(0, 1)
+  alpha0 ~ dnorm(0, 1)T(0,)
   
   ### select neutral or niche-structured
   for(i in 1:Nsp) {
@@ -114,17 +114,4 @@ model {
     }
   }
 
-  
-  # posterior predictive checking -------------------------------------------
-  
-  for (n in 1:Nsample) {
-    y[n] ~ dpois(lambda[Year[n], Species[n]])
-    chi_y[n] <- (y[n] - lambda[Year[n], Species[n]])^2 / lambda[Year[n], Species[n]]
-    chi_n[n] <- (N[n] - lambda[Year[n], Species[n]])^2 / lambda[Year[n], Species[n]]
-  }
-  
-  sum_chi_y <- sum(chi_y[])
-  sum_chi_n <- sum(chi_n[])
-  
-  bp <- step(sum_chi_y - sum_chi_n)
 }

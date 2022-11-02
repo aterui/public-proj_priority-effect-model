@@ -8,7 +8,7 @@ source(here::here("code/library.R"))
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 2.0E+3
+n_iter <- 1.0E+4
 n_thin <- max(3, ceiling(n_iter / 250))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
@@ -41,7 +41,7 @@ para <- c("loglik",
 
 psi <- c(0, 1)
 df_para <- expand.grid(n_species = 10,
-                       n_timestep = c(5, 10, 20),
+                       n_timestep = c(5, 10, 15, 20),
                        r = 1,
                        alpha = c(1, 0.5),
                        k = 100,
@@ -64,10 +64,11 @@ df_p <- foreach(i = seq_len(nrow(df_para)),
                                                alpha = x$alpha,
                                                k = x$k, 
                                                sd_env = x$sd_env,
-                                               model = "ricker")
+                                               model = "bh")
                     
                     df0 <- list_dyn$df_dyn %>% 
-                      mutate(count = rpois(nrow(.), lambda = density))
+                      mutate(density_obs = density * exp(rnorm(n = nrow(.), mean = 0, sd = 0.1)),
+                             count = rpois(nrow(.), lambda = density_obs))
                     
                     ## data for jags ####
                     d_jags <- list(N = df0$count,
@@ -94,13 +95,28 @@ df_p <- foreach(i = seq_len(nrow(df_para)),
                                      adapt = n_ad,
                                      thin = n_thin,
                                      n.sims = 4,
-                                     module = "glm")
+                                     module = "glm",
+                                     silent.jags = TRUE)
                     
                     mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
+                    print(max(mcmc_summary$Rhat, na.rm = T))
                     
-                    
+                    while(max(mcmc_summary$Rhat, na.rm = T) >= 1.15) {
+                      post <- runjags::extend.jags(post,
+                                                   burnin = 0,
+                                                   sample = n_sample,
+                                                   adapt = n_ad,
+                                                   thin = n_thin,
+                                                   n.sims = n_chain,
+                                                   combine = TRUE,
+                                                   silent.jags = TRUE)
+                      
+                      mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
+                      print(max(mcmc_summary$Rhat, na.rm = T))
+                    }
+
+                                        
                     # model evaluation --------------------------------------------------------
-                    
                     waic_bar <- MCMCvis::MCMCchains(post$mcmc) %>% 
                       as_tibble() %>% 
                       dplyr::select(starts_with("loglik")) %>% 
@@ -118,3 +134,24 @@ df_p <- foreach(i = seq_len(nrow(df_para)),
                            waic1 = v_waic[2],
                            d_waic = waic1 - waic0)
                 }
+
+
+# plot --------------------------------------------------------------------
+
+g_waic <- df_p %>% 
+  ggplot(aes(x = n_timestep,
+             y = d_waic,
+             color = factor(alpha)),
+         alpha = 0.8) +
+  geom_hline(yintercept = 0,
+             color = grey(0.8, 0.5)) +
+  geom_point() +
+  geom_line() +
+  labs(color = "Competition ratio") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+ggsave(g_waic,
+       filename = here::here("output/figure_waic.pdf"),
+       height = 5,
+       width = 7.5)
