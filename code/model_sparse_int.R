@@ -42,7 +42,7 @@ model {
   log_r0 ~ dnorm(0, tau0)
   
   for (i in 1:Nsp) {
-    log_d[Nyr1, i] ~ dt(-2, 0.5, df0)
+    log_d[Nyr1, i] ~ dt(0, tau0, df0)
     log_r[i] <- Psi * log_r0 + (1 - Psi) * log_r_prime[i]
     log_r_prime[i] ~ dnorm(0, tau0)
     
