@@ -42,7 +42,7 @@ para <- c("loglik",
 psi <- c(0, 1)
 df_para <- expand.grid(n_species = 10,
                        n_timestep = c(5, 10, 15, 20),
-                       r = 1,
+                       r = log(10),
                        alpha = c(1, 0.5),
                        k = 100,
                        sd_env = 0.1)
@@ -101,7 +101,7 @@ df_p <- foreach(i = seq_len(nrow(df_para)),
                     mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
                     print(max(mcmc_summary$Rhat, na.rm = T))
                     
-                    while(max(mcmc_summary$Rhat, na.rm = T) >= 1.15) {
+                    while(max(mcmc_summary$Rhat, na.rm = T) >= 1.2) {
                       post <- runjags::extend.jags(post,
                                                    burnin = 0,
                                                    sample = n_sample,
