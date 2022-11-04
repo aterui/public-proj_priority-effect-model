@@ -38,10 +38,15 @@ model {
   ## low-level parameters ####
   log_r0 ~ dnorm(0, tau0)
   
+  tau_r ~ dscaled.gamma(scale0, df0)
+  sigma_r <- sqrt(1 / tau_r)
+  
+  tau_alpha ~ dscaled.gamma(scale0, df0)
+  sigma_alpha <- sqrt(1 / tau_alpha)
+  
   for (i in 1:Nsp) {
     log_d[Nyr1, i] ~ dnorm(0, 0.1)
-    log_r[i] <- Psi * log_r0 + (1 - Psi) * log_r_prime[i]
-    log_r_prime[i] ~ dnorm(0, tau0)
+    log_r[i] ~ dnorm(log_r0, tau_r)
     
     tau[i] ~ dscaled.gamma(scale0, df0)
     sigma[i] <- sqrt(1 / tau[i])
@@ -50,28 +55,15 @@ model {
     sigma_obs[i] <- sqrt(1 / tau_obs[i])
   }  
   
-  ## sparse prior for alpha[i, j] for i != j ####
-  alpha0 ~ dnorm(0, 1)T(0,)
+  ## interaction
   
   ### select neutral or niche-structured
-  for(i in 1:Nsp) {
-    for(j in 1:Nsp) {
-      alpha[i, j] <- Psi * alpha0 + (1 - Psi) * alpha_prime[i, j] 
-    }
-  }
-  
   for (i in 1:Nsp) {
+    alpha0[i] ~ dnorm(0, 1)T(0,)
     for (j in 1:Nsp) {
-      alpha_prime[i, j] ~ dnorm(0, tau_alpha[i, j])T(0,)
-      tau_alpha[i, j] <- (1 - z[i, j]) * q0 + z[i, j] * q1
-      z[i, j] ~ dbern(p[i, j])
-      p[i, j] <- W[i, j] * p0[1] + (1 - W[i, j]) * p0[2]
+      alpha[i, j] <- W[i, j] * alpha0[i] + (1 - W[i, j]) * alpha1[i, j]
+      alpha1[i, j] ~ dnorm(alpha0[i], tau_alpha)T(0, 1.5 * alpha0[i])
     }
   }  
   
-  p0[1] ~ dbeta(1, 1)
-  p0[2] ~ dbeta(1, 1)  
-  q0 <- 100
-  q1 <- 1
-
 }

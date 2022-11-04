@@ -67,8 +67,7 @@ df_p <- foreach(i = seq_len(nrow(df_para)),
                                                model = "bh")
                     
                     df0 <- list_dyn$df_dyn %>% 
-                      mutate(density_obs = density * exp(rnorm(n = nrow(.), mean = 0, sd = 0.1)),
-                             count = rpois(nrow(.), lambda = density_obs))
+                      mutate(count = rpois(nrow(.), lambda = density))
                     
                     ## data for jags ####
                     d_jags <- list(N = df0$count,
@@ -84,38 +83,38 @@ df_p <- foreach(i = seq_len(nrow(df_para)),
                                    Psi = psi[j])
                     
                     ## run jags ####
-                    post <- run.jags(m$model,
-                                     monitor = para,
-                                     data = d_jags,
-                                     n.chains = n_chain,
-                                     inits = inits,
-                                     method = "parallel",
-                                     burnin = n_burn,
-                                     sample = n_sample,
-                                     adapt = n_ad,
-                                     thin = n_thin,
-                                     n.sims = 4,
-                                     module = "glm",
-                                     silent.jags = TRUE)
+                    post <- suppressMessages(run.jags(m$model,
+                                                      monitor = para,
+                                                      data = d_jags,
+                                                      n.chains = n_chain,
+                                                      inits = inits,
+                                                      method = "parallel",
+                                                      burnin = n_burn,
+                                                      sample = n_sample,
+                                                      adapt = n_ad,
+                                                      thin = n_thin,
+                                                      n.sims = 4,
+                                                      module = "glm",
+                                                      silent.jags = TRUE))
                     
                     mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
                     print(max(mcmc_summary$Rhat, na.rm = T))
                     
                     while(max(mcmc_summary$Rhat, na.rm = T) >= 1.2) {
-                      post <- runjags::extend.jags(post,
-                                                   burnin = 0,
-                                                   sample = n_sample,
-                                                   adapt = n_ad,
-                                                   thin = n_thin,
-                                                   n.sims = n_chain,
-                                                   combine = TRUE,
-                                                   silent.jags = TRUE)
+                      post <- suppressMessages(runjags::extend.jags(post,
+                                                                    burnin = 0,
+                                                                    sample = n_sample,
+                                                                    adapt = n_ad,
+                                                                    thin = n_thin,
+                                                                    n.sims = n_chain,
+                                                                    combine = TRUE,
+                                                                    silent.jags = TRUE))
                       
                       mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
                       print(max(mcmc_summary$Rhat, na.rm = T))
                     }
-
-                                        
+                    
+                    
                     # model evaluation --------------------------------------------------------
                     waic_bar <- MCMCvis::MCMCchains(post$mcmc) %>% 
                       as_tibble() %>% 
