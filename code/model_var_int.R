@@ -10,9 +10,9 @@ model {
   
   for (t in Nyr1:Nyr) {
     for (i in 1:Nsp) {
-      lambda[t, i] <- d_obs[t, i]
-      log(d_obs[t, i]) <- log_d_obs[t, i]
-      log_d_obs[t, i] ~ dnorm(log_d[t, i], tau_obs[i])
+      lambda[t, i] <- d[t, i]
+      #log(d_obs[t, i]) <- log_d_obs[t, i]
+      #log_d_obs[t, i] ~ dnorm(log_d[t, i], tau_obs[i])
       log(d[t, i]) <- log_d[t, i]
     }
   }  
@@ -25,7 +25,7 @@ model {
       log_mu_d[t, i] <- 
         log_d[t - Q, i] + 
         log_r[i] - 
-        (1 + inprod(alpha[i, ], d[t - Q, ]))
+        log(1 + inprod(alpha[i, ], d[t - Q, ]))
     }
   }
   
@@ -41,9 +41,6 @@ model {
   tau_r ~ dscaled.gamma(scale0, df0)
   sigma_r <- sqrt(1 / tau_r)
   
-  tau_alpha ~ dscaled.gamma(scale0, df0)
-  sigma_alpha <- sqrt(1 / tau_alpha)
-  
   for (i in 1:Nsp) {
     log_d[Nyr1, i] ~ dnorm(0, 0.1)
     log_r[i] ~ dnorm(log_r0, tau_r)
@@ -56,13 +53,20 @@ model {
   }  
   
   ## interaction
+  p ~ dunif(0, 1)
   
   ### select neutral or niche-structured
   for (i in 1:Nsp) {
-    alpha0[i] ~ dnorm(0, 1)T(0,)
+    q0[i] ~ dnorm(0, 1)T(0,)
     for (j in 1:Nsp) {
-      alpha[i, j] <- W[i, j] * alpha0[i] + (1 - W[i, j]) * alpha1[i, j]
-      alpha1[i, j] ~ dnorm(alpha0[i], tau_alpha)T(0, 1.5 * alpha0[i])
+      alpha[i, j] <- alpha_prime[i, j] * q0[i]
+      alpha_prime[i, j] <- W[i, j] + (1 - W[i, j]) * alpha1[i, j]
+      alpha1[i, j] ~ dnorm(mu_alpha[i, j], tau_alpha)T(0, up[i, j])
+      
+      mu_alpha[i, j] <- z[i, j] + (1 - z[i, j])
+      tau_alpha[i, j] <- z[i, j] * 1000 + (1 - z[i, j]) * 1
+      up[i, j] <- z[i, j] * 2 + (1 - z[i, j]) * 1
+      z[i, j] ~ dbern(p)
     }
   }  
   
