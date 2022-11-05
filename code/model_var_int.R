@@ -10,9 +10,9 @@ model {
   
   for (t in Nyr1:Nyr) {
     for (i in 1:Nsp) {
-      lambda[t, i] <- d[t, i]
-      #log(d_obs[t, i]) <- log_d_obs[t, i]
-      #log_d_obs[t, i] ~ dnorm(log_d[t, i], tau_obs[i])
+      lambda[t, i] <- d_obs[t, i]
+      log(d_obs[t, i]) <- log_d_obs[t, i]
+      log_d_obs[t, i] ~ dnorm(log_d[t, i], tau_obs[i])
       log(d[t, i]) <- log_d[t, i]
     }
   }  
@@ -53,21 +53,36 @@ model {
   }  
   
   ## interaction
-  p ~ dunif(0, 1)
+  shape <- 0.25
+  p ~ dbeta(shape, shape)
   
   ### select neutral or niche-structured
   for (i in 1:Nsp) {
     q0[i] ~ dnorm(0, 1)T(0,)
+    
     for (j in 1:Nsp) {
       alpha[i, j] <- alpha_prime[i, j] * q0[i]
       alpha_prime[i, j] <- W[i, j] + (1 - W[i, j]) * alpha1[i, j]
-      alpha1[i, j] ~ dnorm(mu_alpha[i, j], tau_alpha)T(0, up[i, j])
+      alpha1[i, j] ~ dnorm(mu_alpha[i, j], 1)T(low[i, j], 2)
       
-      mu_alpha[i, j] <- z[i, j] + (1 - z[i, j])
-      tau_alpha[i, j] <- z[i, j] * 1000 + (1 - z[i, j]) * 1
-      up[i, j] <- z[i, j] * 2 + (1 - z[i, j]) * 1
-      z[i, j] ~ dbern(p)
+      mu_alpha[i, j] <- z[i, j] * 1 + (1 - z[i, j]) * 0
+      tau_alpha[i, j] <- z[i, j] * 100 + (1 - z[i, j]) * 1
+      low[i, j] <- z[i, j] * 1 + (1 - z[i, j]) * 0
     }
   }  
+  
+  
+  for (i in 1:Nsp) {
+    
+    for (j in (i + 1):Nsp) {
+      z[i, j] ~ dbern(p)
+      z[j, i] <- z[i, j]
+    }
+    
+    for (i_prime in i) {
+      z[i, i_prime] <- 1
+    }
+    
+  }
   
 }
