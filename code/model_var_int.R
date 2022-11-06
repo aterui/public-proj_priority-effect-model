@@ -63,11 +63,10 @@ model {
     for (j in 1:Nsp) {
       alpha[i, j] <- alpha_prime[i, j] * q0[i]
       alpha_prime[i, j] <- W[i, j] + (1 - W[i, j]) * alpha1[i, j]
-      alpha1[i, j] ~ dnorm(mu_alpha[i, j], 1)T(low[i, j], 2)
+      alpha1[i, j] ~ dnorm(mu_alpha[i, j], tau_alpha[i, j])T(0, 2)
       
       mu_alpha[i, j] <- z[i, j] * 1 + (1 - z[i, j]) * 0
       tau_alpha[i, j] <- z[i, j] * 100 + (1 - z[i, j]) * 1
-      low[i, j] <- z[i, j] * 1 + (1 - z[i, j]) * 0
     }
   }  
   
