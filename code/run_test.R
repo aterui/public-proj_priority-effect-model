@@ -47,12 +47,10 @@ n_rep <- 5
 df_out <- foreach(x = iterators::iter(df_para, by = "row"),
                   .combine = bind_rows) %do% {
                     
-                    print(paste("i = ", x$i))
-                    
                     foreach(j = 1:n_rep,
                             .combine = bind_rows) %do% {
                               
-                              print(paste("j = ", j))
+                              print(paste("i = ", x$i, "; j = ", j))
                               set.seed(j)
                               
                               list_dyn <- cdyns::cdynsim(n_species = x$n_species,
@@ -139,7 +137,7 @@ df_out %>%
              y = p,
              color = factor(n_species))) +
   geom_point() +
-  geom_line() +
+  #geom_line() +
   facet_wrap(facets = ~alpha,
              labeller = label_both) +
   labs(color = 'Number of species',
@@ -147,6 +145,6 @@ df_out %>%
        x = "Timestep") +
   theme_bw()
 
-ggsave(filename = "output/test.pdf",
+ggsave(filename = "output/fig_050.pdf",
        height = 5,
        width = 12)
