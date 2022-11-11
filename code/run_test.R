@@ -8,7 +8,7 @@ source(here::here("code/library.R"))
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 5.0E+3
+n_iter <- 3.0E+3
 n_thin <- max(3, ceiling(n_iter / 250))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
@@ -34,15 +34,15 @@ para <- c("p",
 
 # jags --------------------------------------------------------------------
 
-df_para <- expand.grid(n_species = c(2, 5),
+df_para <- expand.grid(n_species = c(2, 5, 10),
                        n_timestep = c(5, 10, 20, 40),
-                       r = log(10),
-                       alpha = c(1, 0.1),
+                       r = c(log(5), log(10)),
+                       alpha = c(0, 0.5, 1),
                        k = 100,
                        sd_env = 0.1) %>% 
   mutate(i = row_number())
 
-n_rep <- 5
+n_rep <- 3
 
 df_out <- foreach(x = iterators::iter(df_para, by = "row"),
                   .combine = bind_rows) %do% {
@@ -114,11 +114,11 @@ df_out <- foreach(x = iterators::iter(df_para, by = "row"),
                                                                               n.sims = n_chain,
                                                                               combine = TRUE,
                                                                               silent.jags = TRUE))
-                                
+
                                 mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
                                 print(max(mcmc_summary$Rhat, na.rm = T))
                               }
-                              
+
                               x %>% 
                                 mutate(n_rep = j,
                                        p = mcmc_summary[1, "50%"]) %>% 
@@ -135,16 +135,18 @@ df_out %>%
   mutate(log_odd = log(p / (1 - p))) %>% 
   ggplot(aes(x = n_timestep,
              y = p,
-             color = factor(n_species))) +
+             color = factor(alpha),
+             fill = factor(alpha))
+         ) +
   geom_point() +
-  #geom_line() +
-  facet_wrap(facets = ~alpha,
+  geom_smooth() +
+  facet_wrap(facets = ~n_species + r,
              labeller = label_both) +
   labs(color = 'Number of species',
        y = "Pr(neutralilty)",
        x = "Timestep") +
   theme_bw()
 
-ggsave(filename = "output/fig_050.pdf",
+ggsave(filename = "output/fig1.pdf",
        height = 5,
        width = 12)
