@@ -61,27 +61,22 @@ model {
     q0[i] ~ dnorm(0, 1)T(0,)
     
     for (j in 1:Nsp) {
+      psi[i, j] <- phi[i, j] * phi[j, i] # assess if both alpha_ij and alpha_ji > 1
+      phi[i, j] <- step(alpha_prime[i, j] - 1) # assess if alpha_ij > 1
+      
       alpha[i, j] <- alpha_prime[i, j] * q0[i]
       alpha_prime[i, j] <- W[i, j] + (1 - W[i, j]) * alpha1[i, j]
-      alpha1[i, j] ~ dnorm(mu_alpha[i, j], tau_alpha[i, j])T(0, 5)
+      alpha1[i, j] ~ dnorm(0, tau_alpha[i, j])T(0, )
       
-      mu_alpha[i, j] <- z[i, j] * 1 + (1 - z[i, j]) * 0
-      tau_alpha[i, j] <- z[i, j] * 100 + (1 - z[i, j]) * 1
+      tau_alpha[i, j] <- z[i, j] * 1 + (1 - z[i, j]) * 10^2
+      z[i, j] ~ dbern(p)
     }
   }  
   
-  
-  for (i in 1:Nsp) {
-    
-    for (j in (i + 1):Nsp) {
-      z[i, j] ~ dbern(p)
-      z[j, i] <- z[i, j]
-    }
-    
-    for (i_prime in i) {
-      z[i, i_prime] <- 1
-    }
-    
+  for (i in 1:(Nsp - 1)) {
+    sum_psi[i] <- sum(psi[i, (i + 1):Nsp]) # summed over diagonal elements
   }
+
+  pi <- sum(sum_psi[]) / (0.5 * Nsp * (Nsp - 1)) # proportion
   
 }

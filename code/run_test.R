@@ -8,7 +8,7 @@ source(here::here("code/library.R"))
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 1.0E+4
+n_iter <- 2.0E+3
 n_thin <- max(3, ceiling(n_iter / 250))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
@@ -25,7 +25,8 @@ for (j in 1:n_chain) inits[[j]]$.RNG.seed <- (j - 1) * 10 + 1
 m <- read.jagsfile("code/model_var_int.R")
 
 ## parameters ####
-para <- c("p",
+para <- c("pi",
+          "p",
           "sigma",
           "log_r0",
           "sigma_r",
@@ -34,15 +35,15 @@ para <- c("p",
 
 # jags --------------------------------------------------------------------
 
-df_para <- expand.grid(n_species = c(2, 5, 10),
-                       n_timestep = c(5, 10, 20, 40),
-                       r = c(log(5), log(10)),
-                       alpha = c(0, 0.5, 1),
+df_para <- expand.grid(n_species = 5,#c(2, 5, 10),
+                       n_timestep = 20,#c(5, 10, 20, 40),
+                       r = log(10),#c(log(5), log(10)),
+                       alpha = c(0, 1),
                        k = 100,
                        sd_env = 0.1) %>% 
   mutate(i = row_number())
 
-n_rep <- 4
+n_rep <- 1
 
 df_out <- foreach(x = iterators::iter(df_para, by = "row"),
                   .combine = bind_rows) %do% {
@@ -105,23 +106,23 @@ df_out <- foreach(x = iterators::iter(df_para, by = "row"),
                               mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
                               print(max(mcmc_summary$Rhat, na.rm = T))
                               
-                              while(max(mcmc_summary$Rhat, na.rm = T) >= 1.1) {
-                                post <- suppressMessages(runjags::extend.jags(post,
-                                                                              burnin = 0,
-                                                                              sample = n_sample,
-                                                                              adapt = n_ad,
-                                                                              thin = n_thin,
-                                                                              n.sims = n_chain,
-                                                                              combine = TRUE,
-                                                                              silent.jags = TRUE))
-
-                                mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
-                                print(max(mcmc_summary$Rhat, na.rm = T))
-                              }
+                              # while(max(mcmc_summary$Rhat, na.rm = T) >= 1.1) {
+                              #   post <- suppressMessages(runjags::extend.jags(post,
+                              #                                                 burnin = 0,
+                              #                                                 sample = n_sample,
+                              #                                                 adapt = n_ad,
+                              #                                                 thin = n_thin,
+                              #                                                 n.sims = n_chain,
+                              #                                                 combine = TRUE,
+                              #                                                 silent.jags = TRUE))
+                              # 
+                              #   mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
+                              #   print(max(mcmc_summary$Rhat, na.rm = T))
+                              # }
 
                               x %>% 
                                 mutate(n_rep = j,
-                                       p = mcmc_summary[1, "50%"]) %>% 
+                                       pi = mcmc_summary[1, "50%"]) %>% 
                                 relocate(n_rep) %>% 
                                 return()
                               
@@ -132,9 +133,8 @@ df_out <- foreach(x = iterators::iter(df_para, by = "row"),
 # plot --------------------------------------------------------------------
 
 df_out %>% 
-  mutate(log_odd = log(p / (1 - p))) %>% 
   ggplot(aes(x = n_timestep,
-             y = p,
+             y = pi,
              color = factor(alpha),
              fill = factor(alpha))
          ) +
@@ -149,6 +149,6 @@ df_out %>%
        x = "Timestep") +
   theme_bw()
 
-ggsave(filename = "output/fig1.pdf",
-       height = 5,
-       width = 12)
+# ggsave(filename = "output/fig1.pdf",
+#        height = 5,
+#        width = 12)
