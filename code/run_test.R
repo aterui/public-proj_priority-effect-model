@@ -8,7 +8,7 @@ source(here::here("code/library.R"))
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 3.0E+3
+n_iter <- 1.0E+4
 n_thin <- max(3, ceiling(n_iter / 250))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
@@ -26,8 +26,8 @@ m <- read.jagsfile("code/model_var_int.R")
 
 ## parameters ####
 para <- c("p",
-          "log_r",
           "sigma",
+          "log_r0",
           "sigma_r",
           "sigma_obs",
           "alpha_prime")
@@ -42,7 +42,7 @@ df_para <- expand.grid(n_species = c(2, 5, 10),
                        sd_env = 0.1) %>% 
   mutate(i = row_number())
 
-n_rep <- 3
+n_rep <- 4
 
 df_out <- foreach(x = iterators::iter(df_para, by = "row"),
                   .combine = bind_rows) %do% {
@@ -140,9 +140,11 @@ df_out %>%
          ) +
   geom_point() +
   geom_smooth() +
-  facet_wrap(facets = ~n_species + r,
+  facet_grid(rows = vars(exp(r)),
+             cols = vars(n_species),
              labeller = label_both) +
-  labs(color = 'Number of species',
+  labs(color = 'Alpha',
+       fill = "Alpha",
        y = "Pr(neutralilty)",
        x = "Timestep") +
   theme_bw()
