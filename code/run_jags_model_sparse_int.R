@@ -4,6 +4,50 @@
 rm(list = ls())
 source(here::here("code/library.R"))
 
+# data --------------------------------------------------------------------
+
+## parameters
+set.seed(1)
+
+nsp <- 25
+r0 <- 1.5
+k <- 100
+
+A <- matrix(runif(nsp * nsp, 0, 1),
+            nsp,
+            nsp)
+
+diag(A) <- 1
+
+df_a <- as_tibble(c(A)) %>% 
+  bind_cols(which(!is.na(A), arr.ind = T)) %>% 
+  rename(alpha0 = value) %>% 
+  mutate(alpha = alpha0 * r0 / k)
+
+## simulate
+set.seed(1)
+list_dyn <- cdyns::cdynsim(n_species = nsp,
+                           n_timestep = 20,
+                           r_type = "constant",
+                           r = r0,
+                           int_type = "manual",
+                           alpha = A,
+                           k = k, 
+                           sd_env = 0.1,
+                           model = "ricker")
+
+## data sort
+df0 <- list_dyn$df_dyn %>% 
+  mutate(count = rpois(nrow(.), lambda = density))
+
+df0 <- df0 %>% 
+  group_by(species) %>% 
+  mutate(index = all(count > 0)) %>% 
+  filter(index == TRUE) %>% 
+  ungroup() %>% 
+  mutate(species = as.numeric(factor(species)))
+
+
 # common setup ------------------------------------------------------------
 
 ## mcmc setup ####
@@ -29,49 +73,11 @@ para <- c("p0",
           "log_r",
           "sigma_obs",
           "sigma",
-          "alpha0")
+          "alpha",
+          "alpha0",
+          "z")
 
 # jags --------------------------------------------------------------------
-
-set.seed(1)
-
-nsp <- 20
-A <- matrix(runif(nsp * nsp, 0, 1),
-            nsp,
-            nsp)
-
-diag(A) <- 1
-
-df_a <- as_tibble(c(A)) %>% 
-  bind_cols(which(!is.na(A), arr.ind = T)) %>% 
-  rename(alpha_prime = value) %>% 
-  mutate(alpha = alpha_prime * 1.5 / 100)
-
-# data --------------------------------------------------------------------
-
-set.seed(1)
-list_dyn <- cdyns::cdynsim(n_species = nsp,
-                           n_timestep = 30,
-                           r_type = "constant",
-                           r = 1,
-                           int_type = "manual",
-                           alpha = A,
-                           k = 100, 
-                           sd_env = 0.1,
-                           model = "bh")
-
-df0 <- list_dyn$df_dyn %>% 
-  mutate(count = rpois(nrow(.), lambda = density))
-
-sp <- df0 %>% 
-  group_by(species) %>% 
-  summarize(n = sum(count)) %>% 
-  filter(n > 0) %>% 
-  pull(species)
-
-df0 <- df0 %>% 
-  filter(species %in% sp) %>% 
-  mutate(species = as.numeric(factor(species)))
 
 ## data for jags ####
 d_jags <- list(N = df0$count,
@@ -98,17 +104,21 @@ post <- suppressMessages(run.jags(m$model,
                                   n.sims = 4,
                                   module = "glm"))
 
-mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc)
+(mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc))
 print(max(mcmc_summary$Rhat, na.rm = T))
+
+
+# plot --------------------------------------------------------------------
 
 df_plot <- mcmc_summary %>% 
   as_tibble(rownames = "param") %>% 
-  filter(str_detect(param, "alpha")) %>% 
+  filter(str_detect(param, "z")) %>% 
   mutate(id = str_extract(param, "\\d{1,},\\d{1,}")) %>% 
   separate(id, into = c("row", "col"),
            convert = T) %>% 
   dplyr::select(row,
                 col,
+                mean,
                 median = `50%`,
                 low = `2.5%`,
                 high = `97.5%`) %>% 
@@ -116,11 +126,11 @@ df_plot <- mcmc_summary %>%
             by = c("row", "col"))
 
 df_plot %>% 
-  ggplot(aes(x = alpha_prime,
-             y = median)) +
+  filter(row != col) %>% 
+  ggplot(aes(x = alpha0,
+             y = mean)) +
   geom_point() +
-  geom_abline(intercept = 0,
-              slope = 1) +
   theme_bw() +
   theme(panel.grid = element_blank())
- 
+
+n_distinct(df0$species)

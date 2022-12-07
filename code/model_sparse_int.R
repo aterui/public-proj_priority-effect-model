@@ -4,7 +4,6 @@ model {
   
   ## observation
   for (n in 1:Nsample) {
-    loglik[n] <- logdensity.pois(N[n], lambda[Year[n], Species[n]])
     N[n] ~ dpois(lambda[Year[n], Species[n]])
   }
   
@@ -25,7 +24,7 @@ model {
       log_mu_d[t, i] <- 
         log_d[t - Q, i] + 
         log_r[i] - 
-        (1 + inprod(alpha[i, ], d[t - Q, ]))
+        inprod(alpha[i, ], d[t - Q, ])
     }
   }
   
@@ -52,24 +51,28 @@ model {
   
   ## sparse prior for alpha[i, j] for i != j ####
   for (i in 1:Nsp) {
-    q[i] ~ dnorm(0, 100)T(0, )
+    #q[i] ~ dnorm(0, 1)T(0, )
+    q[i] ~ dnorm(-6, 3)
+    psi[i] ~ dscaled.gamma(1, 1)
     for (j in 1:Nsp) {
-      # alpha[i, j] ~ dexp(theta[i])
-      # alpha0[i, j] <- alpha[i, j] / alpha[i, i]
-
-      alpha[i, j] <- q[i] * alpha0[i, j]
-      alpha0[i, j] <- W[i, j] + (1 - W[i, j]) * alpha_prime[i, j]
-      alpha_prime[i, j] ~ dnorm(1, tau_alpha[i, j])T(0, )
-      tau_alpha[i, j] <- z[i, j] * q1 + (1 - z[i, j]) * q0
-
-      z[i, j] ~ dbern(p[i, j])
-      p[i, j] <- W[i, j] * p0[1] + (1 - W[i, j]) * p0[2]
+      log(alpha[i, j]) <- log_alpha[i, j]
+      log_alpha[i, j] ~ dnorm(q[i], 1 / (psi[i] * phi))
+      z[i, j] <- step(alpha[i, j] - alpha[i, i])
+      # alpha[i, j] <- q[i] * alpha0[i, j]
+      # alpha0[i, j] <- W[i, j] + (1 - W[i, j]) * b[i, j]
+      # b[i, j] ~ dnorm(0, 1)T(0, )
+      #z[i, j] <- step(b[i, j] - 0.8)
+      # b[i, j] <- z[i, j] * b1 + (1 - z[i, j]) * b0
+      # z[i, j] ~ dbern(p[i, j])
+      # p[i, j] <- W[i, j] * p0[1] + (1 - W[i, j]) * p0[2]
     }
   }  
   
-  q0 <- pow(10, 2)
-  q1 <- pow(1, -2) # sd = 1.5
+  phi ~ dscaled.gamma(1, 1)
+  
+  b1 ~ dnorm(1, pow(1, -2))T(0, )
+  b0 <- 0
+  
   p0[1] <- 1
   p0[2] ~ dbeta(1, 1)
-  #theta ~ dgamma(0.1, 0.1)
 }
