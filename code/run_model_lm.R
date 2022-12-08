@@ -8,10 +8,10 @@ source(here::here("code/library.R"))
 # jags --------------------------------------------------------------------
 
 #set.seed(1)
-nsp <- 30
+nsp <- 5
 r0 <- runif(nsp, 0.5, 2.5)
 k <- 100
-A <- matrix(runif(nsp * nsp, 1, 1),
+A <- matrix(runif(nsp * nsp, 0, 0),
             nsp,
             nsp)
 
@@ -116,13 +116,14 @@ print(max(mcmc_summary$Rhat, na.rm = T))
 
 # plot --------------------------------------------------------------------
 
-# df_jags %>%
-#   ggplot(aes(x = n_t,
-#              y = log_r,
-#              color = factor(species))) +
-#   geom_point() +
-#   geom_smooth(method = "lm",
-#               se = F)
+df_jags %>%
+  ggplot(aes(x = n_t,
+             y = log_r,
+             color = factor(species))) +
+  geom_point() +
+  facet_wrap(facets = ~species) +
+  geom_smooth(method = "lm",
+              se = F)
 
 print(A)
 mcmc_summary %>%
