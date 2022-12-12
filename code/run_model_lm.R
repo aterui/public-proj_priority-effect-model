@@ -8,10 +8,10 @@ source(here::here("code/library.R"))
 # jags --------------------------------------------------------------------
 
 #set.seed(1)
-nsp <- 5
+nsp <- 30
 r0 <- runif(nsp, 0.5, 2.5)
 k <- 100
-A <- matrix(runif(nsp * nsp, 0, 0),
+A <- matrix(runif(nsp * nsp, 1, 1),
             nsp,
             nsp)
 
@@ -27,7 +27,7 @@ df_a <- as_tibble(c(A)) %>%
 
 #set.seed(1)
 list_dyn <- cdyns::cdynsim(n_species = nsp,
-                           n_timestep = 30,
+                           n_timestep = 20,
                            r_type = "constant",
                            r = r0,
                            int_type = "manual",
@@ -60,6 +60,7 @@ df_jags <- df_jags %>%
   mutate(species = as.numeric(factor(species)),
          f = factor(species))
 
+
 # common setup ------------------------------------------------------------
 
 ## mcmc setup ####
@@ -72,60 +73,73 @@ n_sample <- ceiling(n_iter / n_thin)
 
 inits <- replicate(n_chain,
                    list(.RNG.name = "base::Mersenne-Twister",
-                        .RNG.seed = NA,
-                        mu_b = c(1, 1)),
+                        .RNG.seed = NA),
                    simplify = FALSE)
 
 for (j in 1:n_chain) inits[[j]]$.RNG.seed <- (j - 1) * 10 + 1
 
 ## parameters ####
-para <- c("mu_b",
-          "sigma_b",
-          "cv_b",
+para <- c("mu_b0",
+          "mu_b1",
           "tau",
-          "SIGMA")
+          "SIGMA",
+          "lh")
 
 # jags --------------------------------------------------------------------
 
-d_jags <- list(Y = df_jags$log_r,
-               X = df_jags$count0,
-               Year = df_jags$t,
-               Species = df_jags$species,
-               Nsample = nrow(df_jags),
-               Nsp = n_distinct(df_jags$species),
-               Nyear = n_distinct(df_jags$t),
-               K = 2)
+list_waic <- foreach(Z = c(0, 1)) %do% {
+  d_jags <- list(Y = df_jags$log_r,
+                 X = df_jags$count0,
+                 Year = df_jags$t,
+                 Species = df_jags$species,
+                 Nsample = nrow(df_jags),
+                 Nsp = n_distinct(df_jags$species),
+                 Nyear = n_distinct(df_jags$t),
+                 K = 2,
+                 Z = Z)
+  
+  ## run jags ####
+  m <- read.jagsfile("code/model_lm.R")
+  post <- suppressMessages(run.jags(m$model,
+                                    monitor = para,
+                                    data = d_jags,
+                                    n.chains = n_chain,
+                                    inits = inits,
+                                    method = "parallel",
+                                    burnin = n_burn,
+                                    sample = n_sample,
+                                    adapt = n_ad,
+                                    thin = n_thin,
+                                    n.sims = 4,
+                                    module = "glm"))
+  
+  (mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc))
+  print(max(mcmc_summary$Rhat, na.rm = T))
+  
+  
+  # waic --------------------------------------------------------------------
+  
+  MCMCvis::MCMCchains(post$mcmc) %>% 
+    as_tibble() %>% 
+    dplyr::select(starts_with("lh")) %>% 
+    data.matrix() %>% 
+    loo::waic() %>% 
+    return()
+}
 
-## run jags ####
-m <- read.jagsfile("code/model_lm.R")
-post <- suppressMessages(run.jags(m$model,
-                                  monitor = para,
-                                  data = d_jags,
-                                  n.chains = n_chain,
-                                  inits = inits,
-                                  method = "parallel",
-                                  burnin = n_burn,
-                                  sample = n_sample,
-                                  adapt = n_ad,
-                                  thin = n_thin,
-                                  n.sims = 4,
-                                  module = "glm"))
+loo_compare(list_waic[[1]], list_waic[[2]])
 
-(mcmc_summary <- MCMCvis::MCMCsummary(post$mcmc))
-print(max(mcmc_summary$Rhat, na.rm = T))
-
-# plot --------------------------------------------------------------------
-
-df_jags %>%
-  ggplot(aes(x = n_t,
-             y = log_r,
-             color = factor(species))) +
-  geom_point() +
-  facet_wrap(facets = ~species) +
-  geom_smooth(method = "lm",
-              se = F)
-
-print(A)
-mcmc_summary %>%
-  as_tibble(rownames = "param") %>%
-  filter(str_detect(param, "cv"))
+# # plot --------------------------------------------------------------------
+# 
+# df_jags %>%
+#   ggplot(aes(x = n_t,
+#              y = log_r,
+#              color = factor(species))) +
+#   geom_point() +
+#   facet_wrap(facets = ~species) +
+#   geom_smooth(method = "lm",
+#               se = F)
+# 
+# print(A)
+# mcmc_summary %>% 
+#   round(3)
