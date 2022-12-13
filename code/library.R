@@ -13,6 +13,8 @@ pacman::p_load(## gg
   ## bayes
   runjags,
   loo,
+  nimble,
+  bridgesampling,
   ## misc
   forecast,
   scales,
@@ -20,11 +22,4 @@ pacman::p_load(## gg
   corrplot,
   msir,
   stargazer,
-  knitr,
-  ## gis
-  terra,
-  raster,
-  exactextractr,
-  sf,
-  stars,
-  whitebox)
+  knitr)
