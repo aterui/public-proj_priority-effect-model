@@ -12,8 +12,8 @@ model {
   for (t in 1:Nyear) {
     for (j in 1:Nsp) {
       mu[t, j] <- Z * mu1[t, j] + (1 - Z) * mu0[t, j]
-      mu0[t, j] <- b0[j, 1] + b0[j, 2] * x_t[t]
-      mu1[t, j] <- b1[j, 1] + b1[j, 2] * x_t[t]
+      mu0[t, j] <- b0[j, 1] + b0[j, 2] * scl_x_t[t]
+      mu1[t, j] <- b1[j, 1] + b1[j, 2] * scl_x_t[t]
     }
   }
   
@@ -50,6 +50,7 @@ model {
 data {
   
   for (t in 1:Nyear) {
+    scl_x_t[t] <- (x_t[t] - mean(x_t[])) / sd(x_t[])
     x_t[t] <- sum(x[t, ])
   }
   

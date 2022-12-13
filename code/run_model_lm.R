@@ -8,11 +8,11 @@ source(here::here("code/library.R"))
 # jags --------------------------------------------------------------------
 
 #set.seed(1)
-nsp <- 30
+nsp <- 10
 r_min <- 0.5
 r_max <- 2.5
 k <- 100
-A <- matrix(runif(nsp * nsp, 1, 1),
+A <- matrix(runif(nsp * nsp, 0, 0.5),
             nsp,
             nsp)
 
@@ -32,7 +32,7 @@ list_dyn <- cdyns::cdynsim(n_species = nsp,
                            model = "ricker")
 
 df0 <- list_dyn$df_dyn %>% 
-  mutate(count = rpois(nrow(.), lambda = density))
+  mutate(count = rpois(nrow(.), lambda = density + 5))
 
 df_jags <- df0 %>% 
   group_by(species) %>% 
@@ -59,8 +59,8 @@ df_jags <- df_jags %>%
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 1.0E+4
-n_thin <- max(3, ceiling(n_iter / 500))
+n_iter <- 5.0E+4
+n_thin <- max(3, ceiling(n_iter / 1000))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
 n_sample <- ceiling(n_iter / n_thin)
@@ -110,18 +110,20 @@ list_waic <- foreach(Z = c(0, 1)) %do% {
                                     n.sims = 4,
                                     module = "glm"))
   
-  (rhat <- max(MCMCvis::MCMCsummary(post$mcmc)[,"Rhat"],
-               na.rm = T))
+  rhat <- max(MCMCvis::MCMCsummary(post$mcmc)[,"Rhat"],
+              na.rm = T)
+  print(rhat)
   
-  while(rhat >= 1.1) {
-    post <- extend.jags(post,
-                        combine = TRUE,
-                        sample = n_sample,
-                        thin = n_thin)
-    
-    (rhat <- max(MCMCvis::MCMCsummary(post$mcmc)[,"Rhat"],
-                 na.rm = T))
-  }
+  # while(rhat >= 1.1) {
+  #   post <- extend.jags(post,
+  #                       combine = TRUE,
+  #                       sample = n_sample,
+  #                       thin = n_thin)
+  #   
+  #   rhat <- max(MCMCvis::MCMCsummary(post$mcmc)[,"Rhat"],
+  #               na.rm = T)
+  #   print(rhat)
+  # }
   
   MCMCvis::MCMCchains(post$mcmc) %>% 
     as_tibble() %>% 
@@ -133,3 +135,5 @@ list_waic <- foreach(Z = c(0, 1)) %do% {
 }
 
 loo_compare(list_waic[[1]], list_waic[[2]])
+
+d_jags$Nsp
