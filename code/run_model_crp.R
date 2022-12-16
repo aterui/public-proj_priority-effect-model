@@ -9,14 +9,16 @@ source(here::here("code/library.R"))
 
 #set.seed(1)
 nsp <- 20
-r_min <- 0.5
-r_max <- 2.5
 k <- 100
-A <- matrix(runif(nsp * nsp, 0, 1.5),
+v_r <- rnorm(nsp, 1, 0.5)
+v_r[v_r < 0.5] <- 0.5
+A <- matrix(rexp(nsp * nsp, rate = 1/1),
             nsp,
             nsp)
 
 diag(A) <- 1
+# x <- sample(1:nsp, 3)
+# A[x, x] <- 1
 
 df_a <- tibble(value = c(A),
                row = which(!is.na(A), arr.ind = T)[, "row"],
@@ -24,17 +26,18 @@ df_a <- tibble(value = c(A),
 
 #set.seed(1)
 list_dyn <- cdyns::cdynsim(n_species = nsp,
-                           n_timestep = 30,
+                           n_timestep = 20,
                            r_type = "constant",
-                           r = runif(nsp, r_min, r_max),
+                           r = v_r,
                            int_type = "manual",
                            alpha = A,
                            k = k, 
                            sd_env = 0.1,
-                           model = "ricker")
+                           model = "ricker",
+                           immigration = 0)
 
 df0 <- list_dyn$df_dyn %>% 
-  mutate(count = rpois(nrow(.), lambda = density + 3))
+  mutate(count = rpois(nrow(.), lambda = density))
 
 df_jags <- df0 %>% 
   group_by(species) %>%
@@ -46,7 +49,8 @@ df_jags <- df0 %>%
   mutate(count0 = lag(count),
          log_r = log(count) - log(count0)) %>%
   drop_na(log_r) %>% 
-  mutate(t = timestep - 1)
+  mutate(t = timestep - 1) %>% 
+  ungroup()
 
 A <- A[unique(df_jags$species), unique(df_jags$species)]
 
@@ -56,11 +60,18 @@ df_jags <- df_jags %>%
 z <- matrix(NA, n_distinct(df_jags$species), n_distinct(df_jags$species))
 diag(z) <- 1
 
+# df_jags %>% 
+#   ggplot(aes(x = count0,
+#              y = log_r)) +
+#   geom_point() +
+#   facet_wrap(facets = ~species)
+
+
 # common setup ------------------------------------------------------------
 
 ## mcmc setup ####
 n_ad <- 100
-n_iter <- 3.0E+4
+n_iter <- 2E+4
 n_thin <- max(3, ceiling(n_iter / 500))
 n_burn <- ceiling(max(10, n_iter/2))
 n_chain <- 4
@@ -78,7 +89,7 @@ para <- c("z",
           "beta",
           "sigma",
           "alpha",
-          "p")
+          "mu_p")
 
 # jags --------------------------------------------------------------------
 
@@ -89,7 +100,6 @@ d_jags <- list(Y = df_jags$log_r,
                Nsample = nrow(df_jags),
                Nsp = n_distinct(df_jags$species),
                Nyear = n_distinct(df_jags$t),
-               K = 2,
                z = z)
 
 m <- read.jagsfile("code/model_crp.R")
@@ -125,21 +135,21 @@ MCMCvis::MCMCsummary(post$mcmc) %>% round(2)
 
 
 
-# plot --------------------------------------------------------------------
-
-df_plot <- MCMCvis::MCMCsummary(post$mcmc) %>% 
-  as_tibble(rownames = "param") %>% 
-  filter(str_detect(param, "z\\[\\d{1,},\\d{1,}\\]")) %>% 
-  dplyr::select(param, mean) %>% 
-  mutate(id = str_extract(param, "\\d{1,},\\d{1,}")) %>% 
-  separate(id,
-           into = c("row", "col"),
-           convert = T) %>% 
-  left_join(df_a,
-            by = c("row", "col"))
-
-df_plot %>% 
-  filter(row != col) %>% 
-  ggplot(aes(x = value,
-             y = mean)) +
-  geom_point()
+# # plot --------------------------------------------------------------------
+# 
+# df_plot <- MCMCvis::MCMCsummary(post$mcmc) %>% 
+#   as_tibble(rownames = "param") %>% 
+#   filter(str_detect(param, "z\\[\\d{1,},\\d{1,}\\]")) %>% 
+#   dplyr::select(param, mean) %>% 
+#   mutate(id = str_extract(param, "\\d{1,},\\d{1,}")) %>% 
+#   separate(id,
+#            into = c("row", "col"),
+#            convert = T) %>% 
+#   left_join(df_a,
+#             by = c("row", "col"))
+# 
+# df_plot %>% 
+#   filter(row != col) %>% 
+#   ggplot(aes(x = value,
+#              y = mean)) +
+#   geom_point()

@@ -1,38 +1,31 @@
 model {
   
   scale0 <- 2.5
-  df0 <- 6
+  df0 <- 1
   
-  # liklihood ---------------------------------------------------------------
+  # likelihood --------------------------------------------------------------
   for (i in 1:Nsample) {
     Y[i] ~ dnorm(mu[Year[i], Species[i]], tau)
   }
-  
+
   for (t in 1:Nyear) {
     for (j in 1:Nsp) {
-      mu[t, j] <- beta[j, 1] - (beta[j, 2] * x1[t, j] + beta[j, 3] * x2[t, j])
+      mu[t, j] <- beta[j, 1] - beta[j, 2] * (x[t, j] + p[j] * x0[t, j])
     }
   }
   
   # prior -------------------------------------------------------------------
-  s <- rep(2.5, K)
-  alpha ~ dbeta(1, 1)
-  p ~ dbeta(1, 1)
+  alpha ~ dunif(0, 1)
+  phi ~ dgamma(1, 1)
+  mu_p <- 1 / (1 + phi)
+  b0 ~ dnorm(0, pow(2.5, -2))T(0, )
   
   for (j in 1:Nsp) {
     
     beta[j, 1] ~ dnorm(0, pow(2.5, -2))
     beta[j, 2] ~ dnorm(0, pow(2.5, -2))T(0, )
-    beta[j, 3] <- alpha * beta[j, 2]
-    
-    for (k in 1:Nsp) {
-      z[j, k] ~ dbern(p)
-    }
-        
-    for (t in 1:Nyear) {
-      x1[t, j] <- sum(z[j, ] * x[t, ])
-      x2[t, j] <- sum((1 - z[j, ]) * x[t, ])
-    }
+    p[j] ~ dbeta(1, phi)
+    #beta[j, 3] ~ dnorm(0, pow(2.5, -2))T(, beta[j, 2])#<- alpha * beta[j, 2]
     
   }
   
@@ -41,10 +34,10 @@ model {
 }
 
 data {
-  
   for (t in 1:Nyear) {
-    scl_x_t[t] <- (x_t[t] - mean(x_t[])) / sd(x_t[])
-    x_t[t] <- sum(x[t, ])
+    for (j in 1:Nsp) {
+      x0[t, j] <- sum(x[t, ]) - x[t, j]
+    }
   }
   
   for (i in 1:Nsample) {
