@@ -9,44 +9,29 @@ source(here::here("code/library.R"))
 ## parameters
 set.seed(1)
 
-nsp <- 25
-r0 <- 1.5
+nyear <- 20
+nsp <- 10
 k <- 100
+alpha <- 0.5
 
-A <- matrix(runif(nsp * nsp, 0, 1),
-            nsp,
-            nsp)
+b1 <- runif(nsp, 0.5, 2.5)
+b2 <- -b1 / k
+b3 <- b2 * alpha
 
+df_t <- tibble(param = c(rep("b1", nsp),
+                         rep("b2", nsp),
+                         rep("b3", nsp)),
+               true = c(b1, b2, b3),
+               row = rep(1:nsp, 3))
+
+A <- matrix(alpha, nsp, nsp)
+A[1:5, 1:5] <- 1
+for (i in 6:nsp) A[i, ] <- rexp(nsp, 1/0.1)
 diag(A) <- 1
 
-df_a <- as_tibble(c(A)) %>% 
-  bind_cols(which(!is.na(A), arr.ind = T)) %>% 
-  rename(alpha0 = value) %>% 
-  mutate(alpha = alpha0 * r0 / k)
-
 ## simulate
-set.seed(1)
-list_dyn <- cdyns::cdynsim(n_species = nsp,
-                           n_timestep = 20,
-                           r_type = "constant",
-                           r = r0,
-                           int_type = "manual",
-                           alpha = A,
-                           k = k, 
-                           sd_env = 0.1,
-                           model = "ricker")
-
-## data sort
-df0 <- list_dyn$df_dyn %>% 
-  mutate(count = rpois(nrow(.), lambda = density))
-
-df0 <- df0 %>% 
-  group_by(species) %>% 
-  mutate(index = all(count > 0)) %>% 
-  filter(index == TRUE) %>% 
-  ungroup() %>% 
-  mutate(species = as.numeric(factor(species)))
-
+source("code/sim_data.R")
+print(n_distinct(df0$species))
 
 # common setup ------------------------------------------------------------
 
@@ -66,29 +51,22 @@ inits <- replicate(n_chain,
 for (j in 1:n_chain) inits[[j]]$.RNG.seed <- (j - 1) * 10 + 1
 
 ## model file ####
-m <- read.jagsfile("code/model_sparse_int.R")
+m <- read.jagsfile("code/model_ssm.R")
 
 ## parameters ####
-para <- c("p0",
-          "log_r",
-          "sigma_obs",
-          "sigma",
-          "alpha",
-          "alpha0",
-          "z")
+para <- c("b0",
+          "SIGMA")
 
 # jags --------------------------------------------------------------------
 
 ## data for jags ####
-d_jags <- list(N = df0$count,
+d_jags <- list(Y = df0$count,
                Year = df0$timestep,
                Species = df0$species,
                Nsample = nrow(df0),
-               Nyr1 = 1,
-               Nyr = max(df0$timestep),
+               Nt = max(df0$timestep),
                Nsp = n_distinct(df0$species),
-               W = diag(n_distinct(df0$species)),
-               Q = 1)
+               K = 2)
 
 ## run jags ####
 post <- suppressMessages(run.jags(m$model,
@@ -110,27 +88,30 @@ print(max(mcmc_summary$Rhat, na.rm = T))
 
 # plot --------------------------------------------------------------------
 
-df_plot <- mcmc_summary %>% 
-  as_tibble(rownames = "param") %>% 
-  filter(str_detect(param, "z")) %>% 
-  mutate(id = str_extract(param, "\\d{1,},\\d{1,}")) %>% 
+df_plot <- mcmc_summary %>%
+  as_tibble(rownames = "param") %>%
+  filter(str_detect(param, "b")) %>%
+  mutate(id = str_extract(param, "\\d{1,},\\d{1,}")) %>%
   separate(id, into = c("row", "col"),
-           convert = T) %>% 
+           convert = T) %>%
   dplyr::select(row,
                 col,
                 mean,
                 median = `50%`,
                 low = `2.5%`,
                 high = `97.5%`) %>% 
-  left_join(df_a,
-            by = c("row", "col"))
+  mutate(param = case_when(col == 1 ~ "b1",
+                           col == 2 ~ "b2",
+                           col == 3 ~ "b3"),
+         g = case_when(row <= 5 ~ "g1",
+                       row > 5 ~ "g2")) %>% 
+  left_join(df_t, by = c("param", 
+                         "row"))
 
-df_plot %>% 
-  filter(row != col) %>% 
-  ggplot(aes(x = alpha0,
-             y = mean)) +
-  geom_point() +
-  theme_bw() +
-  theme(panel.grid = element_blank())
-
-n_distinct(df0$species)
+ggplot(df_plot,
+       aes(x = median,
+           color = g,
+           fill = g)) +
+  geom_histogram() +
+  facet_wrap(facets = ~param,
+             scales = "free")
