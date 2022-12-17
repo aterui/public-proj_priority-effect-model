@@ -8,7 +8,7 @@ source(here::here("code/library.R"))
 # parameters --------------------------------------------------------------
 
 #set.seed(1)
-nsp <- 3
+nsp <- 20
 k <- 100
 v_r <- rnorm(nsp, 1, 1)
 v_r[v_r < 0.5] <- 0.5
@@ -24,7 +24,7 @@ diag(A) <- 1
 
 # simulate ----------------------------------------------------------------
 
-df_est <- foreach(i = 1:100, .combine = bind_rows) %do% {
+df_est <- foreach(i = 1:100, .combine = c) %do% {
   
   print(i)
   
@@ -70,20 +70,12 @@ df_est <- foreach(i = 1:100, .combine = bind_rows) %do% {
            scl_x0 = scale(count0)) %>% 
     ungroup()
   
-  fit1 <- lm(log_r ~ x, df_jags %>% filter(species == 1))
-  fit2 <- lm(log_r ~ x, df_jags %>% filter(species == 2))
+  fit1 <- lm(log_r ~ spf * x, df_jags)
+  fit2 <- lm(log_r ~ spf + x, df_jags)
   
-  x <- bind_cols(b1 = coef(fit1)[2], b2 = coef(fit2)[2])
+  bf <- AIC(fit1) - AIC(fit2)
   
-  return(x)
+  return(bf)
 }
 
-
-df_est %>% 
-  pivot_longer(cols = c(b1, b2),
-               names_to = "para",
-               values_to = "value") %>% 
-  ggplot(aes(x = value,
-             color = para,
-             fill = para)) +
-  geom_density(alpha = 0.1)
+plot(density(df_est))
