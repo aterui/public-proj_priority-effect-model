@@ -1,5 +1,5 @@
 list_dyn <- cdyns::cdynsim(n_species = nsp,
-                           n_timestep = 20,
+                           n_timestep = nt,
                            r_type = "constant",
                            r = v_r,
                            int_type = "manual",
@@ -14,16 +14,12 @@ df0 <- list_dyn$df_dyn %>%
 
 df0 <- df0 %>% 
   group_by(species) %>%
-  summarize(index = all(count > 0)) %>%
+  summarize(index = sum(count > 0) / nt) %>%
   right_join(df0, by = "species") %>%
   ungroup() %>%
-  filter(index == TRUE) %>%
+  filter(index == 1) %>%
   group_by(species) %>%
-  mutate(count0 = lag(count),
-         log_r = log(count) - log(count0)) %>%
-  drop_na(log_r) %>% 
+  mutate(count0 = lag(count)) %>%
+  drop_na(count0) %>% 
   mutate(t = timestep - 1) %>% 
-  ungroup()# %>% 
-  # group_by(timestep) %>% 
-  # mutate(x = mean(count0)) %>% 
-  # ungroup()
+  ungroup()
