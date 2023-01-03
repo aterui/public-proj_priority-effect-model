@@ -1,3 +1,4 @@
+
 list_dyn <- cdyns::cdynsim(n_species = nsp,
                            n_timestep = nt,
                            r_type = "constant",
@@ -7,12 +8,12 @@ list_dyn <- cdyns::cdynsim(n_species = nsp,
                            k = k, 
                            sd_env = 0.1,
                            model = "ricker",
-                           immigration = 5)
+                           immigration = 10)
 
 df0 <- list_dyn$df_dyn %>% 
   mutate(count = rpois(nrow(.), lambda = density))
 
-df0 <- df0 %>% 
+df0 <- df0 %>%
   group_by(species) %>%
   summarize(index = sum(count > 0) / nt) %>%
   right_join(df0, by = "species") %>%

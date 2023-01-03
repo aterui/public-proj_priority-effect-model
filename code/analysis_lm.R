@@ -17,8 +17,9 @@ k <- v_r / b
 
 subsp <- c(2, 3)
 
-h01 <- foreach(i = 1:100, .combine = bind_rows) %do% {
-  
+# h01 <- foreach(i = 1:100, .combine = bind_rows) %do% {
+
+for(i in 1:100) {  
   print(i)
   
   A <- matrix(0.01,
@@ -32,7 +33,7 @@ h01 <- foreach(i = 1:100, .combine = bind_rows) %do% {
   # simulate ----------------------------------------------------------------
   
   sp <- 1
-  while(sp < nsp) {
+  while(sp < 5) {
     source("code/sim_data.R")
     (sp <- n_distinct(df0$species))
   }
@@ -72,6 +73,7 @@ h01 <- foreach(i = 1:100, .combine = bind_rows) %do% {
   
   lr <- c(exp(logLik(h0) - logLik(h1)))
   
+  if(p0 < 0.05) stop("er")
   return(tibble(dbic, lr, p0))
 }
 
