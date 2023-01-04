@@ -19,7 +19,7 @@ A <- matrix(runif(nsp^2, 0, 0.25),
             nsp)
 
 A[1:nn, ] <- A[, 1:nn] <- 0.01
-A[1:nn, 1:nn] <- 1
+A[1:nn, 1:nn] <- 0
 
 diag(A) <- 1
 
@@ -34,11 +34,8 @@ list_dyn <- cdyns::cdynsim(n_species = nsp,
                            int_type = "manual",
                            alpha = A,
                            k = k, 
-                           sd_env = 0,
-                           n_warmup = 0,
-                           n_burnin = 0,
-                           seed = 100,
-                           seed_interval = 0,
+                           sd_env = 0.01,
+                           seed = 10,
                            model = "ricker")
 
 df0 <- list_dyn$df_dyn %>% 
@@ -96,9 +93,8 @@ df_jags %>%
              scales = "free")
 
 list_dyn$df_dyn %>% 
-  filter(species %in% c(1, 2)) %>% 
   ggplot(aes(x = timestep,
              y = density,
              color = factor(species))) +
-  geom_line()
-    
+  geom_line() +
+  geom_point()
