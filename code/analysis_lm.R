@@ -15,11 +15,9 @@ v_r <- c(rep(1.5, nn), runif(nsp - nn, 1, 2.5))
 b <- c(rep(0.002, nn), runif(nsp - nn, 0, 0.002))
 k <- v_r / b
 
-subsp <- c(2, 3)
+subsp <- c(2, 4)
 
-# h01 <- foreach(i = 1:100, .combine = bind_rows) %do% {
-
-for(i in 1:100) {  
+h01 <- foreach(i = 1:100, .combine = bind_rows) %do% {
   print(i)
   
   A <- matrix(0.01,
@@ -62,7 +60,7 @@ for(i in 1:100) {
             family = "poisson",
             data = df1)
   
-  h1 <- glm(x ~ x0 * species + offset(log(x0)),
+  h1 <- glm(x ~ xt * species + offset(log(x0)),
             family = "poisson",
             data = df1)
   
@@ -73,7 +71,6 @@ for(i in 1:100) {
   
   lr <- c(exp(logLik(h0) - logLik(h1)))
   
-  if(p0 < 0.05) stop("er")
   return(tibble(dbic, lr, p0))
 }
 

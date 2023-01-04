@@ -6,82 +6,51 @@ source(here::here("code/library.R"))
 
 # parameters --------------------------------------------------------------
 
-#set.seed(1)
-nsp <- 10
-nt <- 20
-v_r <- runif(nsp, 1.5, 1.5)
-b <- runif(nsp, 0, 0.002)
-k <- v_r / b
-
-A <- matrix(rexp(nsp^2, 1/0.5), nsp, nsp)
-diag(A) <- 1
-
 sp <- 1
-while(sp < 5) {
+while(sp < 3) {
   source("code/sim_data.R")
-  (sp <- n_distinct(df0$species))
+  (sp <- n_distinct(df1$spf))
 }
 
-print(n_distinct(df0$species))
+print(n_distinct(df1$spf))
 
 
 # neutral index -----------------------------------------------------------
 
 Am <- sqrt(A * t(A))
-Am <- Am[unique(df0$species), unique(df0$species)]
+Am <- Am[unique(df1$spf), unique(df1$spf)]
 
-# x <- rowSums(A)
-# y <- colSums(A)
-# m_d <- cbind(v_r, x, y)
-# v_mean <- colMeans(m_d)
-# m_cov <- cov(m_d)
-# 
-# m_dist <- dist(m_d) %>% 
-#   data.matrix()
-# 
-# m_dist <- m_dist[unique(df0$species), unique(df0$species)]
 
 # analysis ----------------------------------------------------------------
 
-M <- matrix(NA, n_distinct(df0$species), n_distinct(df0$species))
-combo <- combn(n_distinct(df0$species), 2)
+M <- matrix(NA, n_distinct(df1$spf), n_distinct(df1$spf))
+combo <- combn(n_distinct(df1$spf), 2)
 
 for (i in 1:ncol(combo)) {
 
   subsp <- combo[, i]
   
-  df1 <- df0 %>%
-    mutate(species = factor(species) %>% as.numeric()) %>% 
-    filter(species %in% subsp) %>% 
-    mutate(x = count,
-           x0 = count0,
-           spf = case_when(species == subsp[1] ~ 1,
-                           species == subsp[2] ~ 2),
-           spf = factor(spf),
-           species = factor(species)) %>% 
-    pivot_wider(id_cols = c(t, x, x0, species),
-                names_prefix = "sp",
-                names_from = spf,
-                values_from = count0)
+  df_lm <- df2 %>% 
+    filter(sp1 %in% subsp[1],
+           sp2 %in% subsp[2]) %>% 
+    mutate(xt = (x0_i + x0_j) / 2)
+    
+  h1 <- MASS::rlm(log_r ~ scale(x0_i),
+                  data = df_lm,
+                  method = "MM")
   
-  df1 <- df1 %>% 
-    mutate(sp1 = rep(na.omit(df1$sp1), 2),
-           sp2 = rep(na.omit(df1$sp2), 2),
-           xt = sp1 + sp2)
+  h0 <- MASS::rlm(log_r ~ scale(xt),
+                  data = df_lm,
+                  method = "MM")
   
-  h0 <- glm(x ~ xt + offset(log(x0)),
-            family = "poisson",
-            data = df1)
+  p0 <- abs(coef(h0)[2] - coef(h1)[2])
   
-  h1 <- glm(x ~ x0 * species + offset(log(x0)),
-            family = "poisson",
-            data = df1)
-
-  M[combo[1, i], combo[2, i]] <- BIC(h0) - BIC(h1)
+  # p <- exp(-0.5 * BIC(h0)) + exp(-0.5 * BIC(h1))
+  # p0 <- exp(-0.5 * BIC(h0)) / p
+  # p1 <- exp(-0.5 * BIC(h1)) / p
+  
+  M[combo[1, i], combo[2, i]] <- p0
 }
-
-M[M > 0] <- 0
-M[M < 0] <- 1
 
 
 plot(M ~ Am)
