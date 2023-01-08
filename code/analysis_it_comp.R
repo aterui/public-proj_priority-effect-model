@@ -8,67 +8,96 @@ source(here::here("code/library.R"))
 # sim data ----------------------------------------------------------------
 
 nsp <- 10
-nn <- 1
 nt <- 20
-v_r <- runif(nsp, 0.5, 2.5)#rep(1.5, nsp)
-b <- rep(0.001, nsp)
-k <- v_r / b
-
 
 # test --------------------------------------------------------------------
 
-a <- 0:10 * 0.1
+a <- seq(0, 1, by = 0.25)
 
 df_b <- foreach(i = 1:length(a),
                 .combine = bind_rows) %do% {
                   
                   print(i)
                   
-                  df0 <- foreach(j = 1:100,
+                  df0 <- foreach(j = 1:50,
                                  .combine = bind_rows) %do% {
                                    
-                                   A <- matrix(abs(rnorm(nsp^2,
-                                                         mean = a[i],
-                                                         sd = 0.1)),
+                                   v_r <- runif(nsp, 1.5, 1.5)#rep(1.5, nsp)
+                                   k <- runif(nsp, 1000, 1000)
+                                   
+                                   A <- matrix(runif(nsp^2,
+                                                     min = max(a[i] - 0.1, 0),
+                                                     max = min(a[i] + 0.1, 1)),
                                                nsp,
                                                nsp)
                                    
+                                   #A[upper.tri(A)] <- 1
                                    diag(A) <- 1
+                                   # 
+                                   # if(a[i] == 1) {
+                                   #   A[,] <- 1
+                                   #   v_r <- rep(mean(v_r), nsp)
+                                   #   b <- mean(b)
+                                   #   k <- v_r / b
+                                   #}
                                    
                                    source(here::here("code/sim_data.R"))
                                    
                                    df_null <- df2 %>%
                                      filter(sp1 == sp2) %>% 
                                      group_by(t) %>%
-                                     mutate(xt = mean(x_j),
-                                            xt0 = mean(x0_j),
-                                            p_x = x0_i / xt0) %>% 
+                                     mutate(xt0 = sum(x0_j)) %>% 
                                      ungroup() %>% 
-                                     group_by(sp1) %>% 
-                                     mutate(scl_x0_i = scale(x0_i) %>% c(),
-                                            scl_xt0 = scale(xt0) %>% c()) %>% 
-                                     ungroup()
+                                     mutate(p_x = x0_i / xt0,
+                                            logit_p_x = log(p_x) / (1 - log(p_x)))
                                    
-                                   fit <- glmmTMB::glmmTMB(log_r ~ p_x + (1 | sp1),
-                                                           df_null)
+                                   df_p <- list_dyn$df_species %>% 
+                                     dplyr::select(species, mean_density) %>% 
+                                     mutate(p = mean_density / sum(mean_density)) %>% 
+                                     rename(sp1 = species)
                                    
-                                   beta <- fit %>% summary() %>% coef
-                                   
+                                   df_lm <- df_null %>%
+                                     group_by(sp1) %>%
+                                     do(lm = lm(log_r ~ p_x, .) %>% coef()) %>%
+                                     mutate(b0 = lm[1],
+                                            b1 = lm[2]) %>%
+                                     dplyr::select(-lm) %>%
+                                     left_join(df_p,
+                                               by = "sp1") %>%
+                                     mutate(w_b1 = p * b1)
+                                    
+                                   fit <- lm(log(abs(b1)) ~ log(p), df_lm) %>% 
+                                     summary()
+                                      
                                    return(tibble(alpha = a[i],
-                                                 b0 = beta$cond[2, 1],
-                                                 se0 = beta$cond[2, 2]))
-                                   
+                                                 r1 = cor(df_lm$b1, df_lm$p,
+                                                          method = "spearman"),
+                                                 r2 = cor(log(abs(df_lm$b1)), log(df_lm$p),
+                                                          method = "pearson"),
+                                                 rsq1 = fit$r.squared,
+                                                 rsq2 = fit$adj.r.squared)
+                                          )
+
                                  }
                   
                   return(df0)
                 }
 
-
-df_b %>% 
-  pivot_longer(cols = c(b0, se0)) %>% 
+df_b %>%
+  pivot_longer(cols = c(r1, rsq1)) %>%
   ggplot(aes(x = factor(alpha),
-             y = abs(value))) +
-  geom_violin(draw_quantiles = 0.5) +
+             y = value)) +
+  #geom_violin(draw_quantiles = 0.5) +
+  geom_boxplot() +
+  #geom_point(alpha = 0.2) +
   geom_jitter(alpha = 0.2) +
   facet_wrap(facets = ~ name,
              scales = "free")
+# 
+# df_lm %>%
+#   ggplot(aes(x = p,
+#              y = -b1)) +
+#   geom_point() +
+#   scale_x_continuous(trans = "log10") +
+#   scale_y_continuous(trans = "log10")
+# 

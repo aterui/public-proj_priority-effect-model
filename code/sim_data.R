@@ -7,9 +7,11 @@ list_dyn <- cdyns::cdynsim(n_species = nsp,
                            alpha = A,
                            k = k,
                            seed = 100,
-                           sd_env = 0.05,
-                           model = "ricker",
-                           immigration = 5)
+                           sd_env = 0.1,
+                           model = "bh",
+                           immigration = 0)
+
+list_dyn$df_dyn %>% ggplot(aes(x = timestep, y = density, color = factor(species))) + geom_line()
 
 df1 <- list_dyn$df_dyn %>%
   mutate(x = rpois(nrow(.), lambda = density)) %>%

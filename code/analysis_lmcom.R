@@ -6,6 +6,22 @@ source(here::here("code/library.R"))
 
 # parameters --------------------------------------------------------------
 
+#set.seed(1)
+nsp <- 10
+nt <- 20
+nn <- 3
+v_r <- c(rep(1.5, nn), runif(nsp - nn, 1, 2.5))
+b <- c(rep(0.002, nn), runif(nsp - nn, 0, 0.002))
+k <- v_r / b
+
+A <- matrix(0.01,
+            nsp,
+            nsp)
+
+A[1:nn, 1:nn] <- 1
+A[(nn + 1):nsp, (nn + 1):nsp] <- runif(length((nn + 1):nsp)^2, 0, 0.5)
+diag(A) <- 1
+
 sp <- 1
 while(sp < 3) {
   source("code/sim_data.R")
@@ -33,23 +49,13 @@ for (i in 1:ncol(combo)) {
   df_lm <- df2 %>% 
     filter(sp1 %in% subsp[1],
            sp2 %in% subsp[2]) %>% 
-    mutate(xt = (x0_i + x0_j) / 2)
+    mutate(xt = (x0_i + x0_j),
+           p_x = x0_i / xt)
     
-  h1 <- MASS::rlm(log_r ~ scale(x0_i),
-                  data = df_lm,
-                  method = "MM")
+  fit <- lm(log_r ~ p_x,
+            data = df_lm)
   
-  h0 <- MASS::rlm(log_r ~ scale(xt),
-                  data = df_lm,
-                  method = "MM")
-  
-  p0 <- abs(coef(h0)[2] - coef(h1)[2])
-  
-  # p <- exp(-0.5 * BIC(h0)) + exp(-0.5 * BIC(h1))
-  # p0 <- exp(-0.5 * BIC(h0)) / p
-  # p1 <- exp(-0.5 * BIC(h1)) / p
-  
-  M[combo[1, i], combo[2, i]] <- p0
+  M[combo[1, i], combo[2, i]] <- coef(fit)[2]
 }
 
 
