@@ -22,7 +22,7 @@ df_b <- foreach(i = 1:length(a),
                   df0 <- foreach(j = 1:50,
                                  .combine = bind_rows) %do% {
                                    
-                                   v_r <- runif(nsp, 1.5, 1.5)#rep(1.5, nsp)
+                                   v_r <- runif(nsp, 1.5, 1.5)
                                    k <- runif(nsp, 1000, 1000)
                                    
                                    A <- matrix(runif(nsp^2,
@@ -31,25 +31,27 @@ df_b <- foreach(i = 1:length(a),
                                                nsp,
                                                nsp)
                                    
-                                   #A[upper.tri(A)] <- 1
                                    diag(A) <- 1
-                                   # 
-                                   # if(a[i] == 1) {
-                                   #   A[,] <- 1
-                                   #   v_r <- rep(mean(v_r), nsp)
-                                   #   b <- mean(b)
-                                   #   k <- v_r / b
-                                   #}
+                                   
+                                   if(a[i] == 1) {
+                                     A[,] <- 1
+                                     # v_r <- rep(mean(v_r), nsp)
+                                     # b <- mean(b)
+                                     # k <- v_r / b
+                                   }
                                    
                                    source(here::here("code/sim_data.R"))
                                    
                                    df_null <- df2 %>%
                                      filter(sp1 == sp2) %>% 
                                      group_by(t) %>%
-                                     mutate(xt0 = sum(x0_j)) %>% 
+                                     mutate(xt = sum(x_j),
+                                            xt0 = sum(x0_j)) %>% 
                                      ungroup() %>% 
-                                     mutate(p_x = x0_i / xt0,
-                                            logit_p_x = log(p_x) / (1 - log(p_x)))
+                                     mutate(p_x = x_i / xt,
+                                            p_x0 = x0_i / xt0,
+                                            log_pr = log(p_x) - log(p_x0),
+                                            logit_p_x0 = log(p_x0) / (1 - log(p_x0)))
                                    
                                    df_p <- list_dyn$df_species %>% 
                                      dplyr::select(species, mean_density) %>% 
@@ -58,7 +60,7 @@ df_b <- foreach(i = 1:length(a),
                                    
                                    df_lm <- df_null %>%
                                      group_by(sp1) %>%
-                                     do(lm = lm(log_r ~ p_x, .) %>% coef()) %>%
+                                     do(lm = lm(log_pr ~ p_x0, .) %>% coef()) %>%
                                      mutate(b0 = lm[1],
                                             b1 = lm[2]) %>%
                                      dplyr::select(-lm) %>%
@@ -87,9 +89,7 @@ df_b %>%
   pivot_longer(cols = c(r1, rsq1)) %>%
   ggplot(aes(x = factor(alpha),
              y = value)) +
-  #geom_violin(draw_quantiles = 0.5) +
-  geom_boxplot() +
-  #geom_point(alpha = 0.2) +
+  geom_violin(draw_quantiles = 0.5) +
   geom_jitter(alpha = 0.2) +
   facet_wrap(facets = ~ name,
              scales = "free")
