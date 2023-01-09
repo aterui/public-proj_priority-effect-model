@@ -9,7 +9,7 @@ list_dyn <- cdyns::cdynsim(n_species = nsp,
                            seed = 100,
                            sd_env = 0.1,
                            model = "ricker",
-                           immigration = 5)
+                           immigration = 0)
 
 df1 <- list_dyn$df_dyn %>%
   mutate(x = rpois(nrow(.), lambda = density)) %>%

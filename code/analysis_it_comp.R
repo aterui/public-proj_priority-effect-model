@@ -7,7 +7,7 @@ source(here::here("code/library.R"))
 
 # sim data ----------------------------------------------------------------
 
-nsp <- 10
+nsp <- 20
 nt <- 20
 
 # test --------------------------------------------------------------------
@@ -19,25 +19,32 @@ df_b <- foreach(i = 1:length(a),
                   
                   print(i)
                   
-                  df0 <- foreach(j = 1:50,
+                  df0 <- foreach(j = 1:100,
                                  .combine = bind_rows) %do% {
                                    
-                                   v_r <- runif(nsp, 1.5, 1.5)
-                                   k <- runif(nsp, 1000, 1000)
+                                   v_r <- runif(nsp, 0.5, 2.5)
+                                   k <- runif(nsp, 500, 500)
                                    
                                    A <- matrix(runif(nsp^2,
-                                                     min = max(a[i] - 0.1, 0),
-                                                     max = min(a[i] + 0.1, 1)),
+                                                     min = max(a[i] - 0.25, 0),
+                                                     max = min(a[i] + 0.25, 1)),
                                                nsp,
                                                nsp)
                                    
                                    diag(A) <- 1
                                    
+                                   #A[upper.tri(A)] <- 1
+                                   
                                    if(a[i] == 1) {
-                                     A[,] <- 1
-                                     # v_r <- rep(mean(v_r), nsp)
-                                     # b <- mean(b)
-                                     # k <- v_r / b
+                                     A <- matrix(runif(nsp^2,
+                                                       min = max(a[i] - 0.05),
+                                                       max = min(a[i] + 0.05)),
+                                                 nsp,
+                                                 nsp)
+                                     
+                                     diag(A) <- 1
+                                     v_r <- rep(mean(v_r), nsp)
+                                     k <- mean(k)
                                    }
                                    
                                    source(here::here("code/sim_data.R"))
@@ -60,24 +67,21 @@ df_b <- foreach(i = 1:length(a),
                                    
                                    df_lm <- df_null %>%
                                      group_by(sp1) %>%
-                                     do(lm = lm(log_pr ~ p_x0, .) %>% coef()) %>%
+                                     do(lm = MASS::rlm(log_r ~ p_x0, .) %>% coef()) %>%
                                      mutate(b0 = lm[1],
                                             b1 = lm[2]) %>%
                                      dplyr::select(-lm) %>%
                                      left_join(df_p,
-                                               by = "sp1") %>%
-                                     mutate(w_b1 = p * b1)
+                                               by = "sp1")
                                     
                                    fit <- lm(log(abs(b1)) ~ log(p), df_lm) %>% 
                                      summary()
                                       
                                    return(tibble(alpha = a[i],
-                                                 r1 = cor(df_lm$b1, df_lm$p,
+                                                 r = cor(df_lm$b1, df_lm$p,
                                                           method = "spearman"),
-                                                 r2 = cor(log(abs(df_lm$b1)), log(df_lm$p),
-                                                          method = "pearson"),
-                                                 rsq1 = fit$r.squared,
-                                                 rsq2 = fit$adj.r.squared)
+                                                 rsq = fit$r.squared,
+                                                 z = abs(coef(fit)[2, 1]))
                                           )
 
                                  }
@@ -86,7 +90,7 @@ df_b <- foreach(i = 1:length(a),
                 }
 
 df_b %>%
-  pivot_longer(cols = c(r1, rsq1)) %>%
+  pivot_longer(cols = c(r, rsq, z)) %>%
   ggplot(aes(x = factor(alpha),
              y = value)) +
   geom_violin(draw_quantiles = 0.5) +
